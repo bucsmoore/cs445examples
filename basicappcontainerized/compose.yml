@@ -1,0 +1,12 @@
+services:
+  app:
+    image: app:latest
+    build:
+      context: .
+    working_dir: /var/app
+    container_name: app
+    volumes:
+      - ./app.py:/var/app/app.py
+    command: ["flask", "run"]
+    ports:
+      - "80:5000"
