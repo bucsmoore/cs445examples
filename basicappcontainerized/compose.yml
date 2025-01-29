@@ -13,3 +13,17 @@ services:
     command: ["flask", "run", "--host=0.0.0.0"]
     ports:
       - "80:5000"
+  # app2:
+  #   image: app:latest
+  #   build:
+  #     context: .
+  #     #dockerfile: Dockerfile
+  #   working_dir: /var/app
+  #   environment:
+  #     - FLASK_APP=app.py
+  #   container_name: app2
+  #   volumes:
+  #     - ./app.py:/var/app/app.py
+  #   command: ["flask", "run", "--host=0.0.0.0"]
+  #   ports:
+  #     - "8080:5000"
