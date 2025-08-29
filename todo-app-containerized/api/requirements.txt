@@ -1,0 +1,2 @@
+Flask
+redis # Although HTMX makes direct calls, 'redis' could be useful for server-side caching if needed

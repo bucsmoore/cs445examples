@@ -1,0 +1,55 @@
+services:
+  app:
+    build: ./app
+    volumes:
+      - ./app:/app
+    environment:
+      - API_URL=/api # Frontend needs to know where the API is, 'api' is the service name
+    depends_on:
+      - api # Ensure API is up before app tries to connect
+    command: flask run --host=0.0.0.0
+    healthcheck: # Add healthcheck for the app service
+      test: ["CMD-SHELL", "curl -f http://localhost:5000 || exit 1"] # Test if Flask app is reachable
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s # Give the app some time to start initially
+  api:
+    build: ./api
+    volumes:
+      - ./api:/app
+    environment:
+      - REDIS_HOST=db # 'db' is the service name for Redis
+      - REDIS_PORT=6379
+    depends_on:
+      - db # Ensure Redis is up before API tries to connect
+    command: flask run --host=0.0.0.0
+    healthcheck: # Add healthcheck for the app service
+      test: ["CMD-SHELL", "curl -f http://localhost:5000 || exit 1"] # Test if Flask app is reachable
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s # Give the app some time to start initially
+  db:
+    image: redis:7.0-alpine # Using a lightweight Redis image
+    volumes:
+      - redis_data:/data # Persist Redis data
+
+  server:
+    image: nginx:latest # Use the official Nginx image
+    ports:
+      - "80:80" # Expose standard HTTP port
+    volumes:
+      - ./server/nginx.conf:/etc/nginx/nginx.conf:ro # Mount custom Nginx config
+    depends_on:
+      app: # Now depend on the 'app' service being healthy
+        condition: service_healthy
+      api: # And depend on the 'api' service being healthy
+        condition: service_healthy
+
+volumes:
+  redis_data: # Define the volume for Redis persistence
+
+networks:
+  default:
+    driver: bridge

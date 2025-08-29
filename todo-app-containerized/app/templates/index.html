@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Simple To-Do App</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+        <style>
+            body {
+                font-family: 'Inter', sans-serif;
+                background-color: #1a202c;
+                color: #e2e8f0;
+            }
+
+            .task-item {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 0.75rem;
+                background-color: #2d3748;
+                border-radius: 0.375rem;
+                margin-bottom: 0.5rem;
+            }
+
+            .completed {
+                text-decoration: line-through;
+                color: #a0aec0;
+            }
+        </style>
+    </head>
+
+    <body class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md">
+            <h1 class="text-3xl font-bold mb-6 text-center text-blue-400">My To-Do List</h1>
+
+            <!-- Add New Task Form -->
+            <form hx-post="{{ API_BASE_URL }}/createtask" hx-target="#tasks-list"
+                  hx-swap="beforeend" hx-on::after-request="this.reset()"
+                  class="mb-6 flex space-x-2">
+                <input type="text" name="description" placeholder="New task..."
+                       class="flex-grow p-2 rounded-md bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-200"
+                       required>
+                <button type="submit"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md transition duration-150 ease-in-out">
+                    Add Task
+                </button>
+            </form>
+
+            <!-- Tasks List -->
+            <div id="tasks-list" hx-get="{{ API_BASE_URL }}/loadtasks" hx-trigger="load, every 5s"
+                 class="space-y-3">
+                <!-- Tasks will be loaded here by HTMX -->
+                <p class="text-gray-400 text-center">Loading tasks...</p>
+            </div>
+        </div>
+
+        <!-- HTMX Template for a single task item -->
+        <template id="task-template">
+            <div class="task-item" hx-target="this" hx-swap="outerHTML">
+                <input type="checkbox"
+                       hx-put="{{ API_BASE_URL }}/edittask/$TASK_ID$"
+                       hx-vals='js:{"completed": event.target.checked}'
+                       class="form-checkbox h-5 w-5 text-blue-600 rounded mr-3 bg-gray-700 border-gray-600 focus:ring-blue-500"
+                       $COMPLETED_CHECKED$>
+                <span class="flex-grow text-gray-200 $COMPLETED_CLASS$">$DESCRIPTION$</span>
+                <button hx-delete="{{ API_BASE_URL }}/deletetask/$TASK_ID$" hx-trigger="click"
+                        class="ml-3 text-red-400 hover:text-red-500">
+                    Delete
+                </button>
+            </div>
+        </template>
+
+        <script>
+            document.body.addEventListener('htmx:afterOnLoad', function (evt) {
+                // Check if the request that triggered this event was for loading tasks
+                const requestPath = evt.detail.requestConfig.path;
+                if (requestPath && requestPath.includes('/loadtasks')) {
+                    const tasksList = document.getElementById('tasks-list');
+                    const newTasksHtml = evt.detail.xhr.responseText;
+
+                    try {
+                        const tasks = JSON.parse(newTasksHtml);
+
+                        // Debugging logs:
+                        // console.log("Parsed tasks:", tasks);
+                        // console.log("Type of tasks:", typeof tasks);
+                        // console.log("Is tasks an array:", Array.isArray(tasks));
+
+                        tasksList.innerHTML = ''; // Clear existing tasks before re-rendering
+                        const taskTemplate = document.getElementById('task-template');
+
+                        if (!Array.isArray(tasks) || tasks.length === 0) { // Also check if it's an array
+                            tasksList.innerHTML = '<p class="text-gray-400 text-center">No tasks yet. Add one above!</p>';
+                            return;
+                        }
+
+                        tasks.forEach(task => {
+                            const clone = document.importNode(taskTemplate.content, true);
+                            const taskDiv = clone.querySelector('.task-item');
+                            taskDiv.setAttribute('id', `task-${task.id}`); // Set ID for HTMX to target
+
+                            // Replace placeholders
+                            clone.querySelector('input[type="checkbox"]').checked = task.completed;
+                            clone.querySelector('input[type="checkbox"]').name = `task_status_${task.id}`; // Give it a unique name
+
+                            const span = clone.querySelector('span');
+                            span.textContent = task.description;
+                            if (task.completed) {
+                                span.classList.add('completed');
+                            } else {
+                                span.classList.remove('completed');
+                            }
+
+                            // Update HTMX attributes with actual task ID
+                            const checkbox = clone.querySelector('input[type="checkbox"]');
+                            checkbox.setAttribute('hx-put', `{{ API_BASE_URL }}/edittask/${task.id}`);
+
+                            const deleteButton = clone.querySelector('button[hx-delete]');
+                            deleteButton.setAttribute('hx-delete', `{{ API_BASE_URL }}/deletetask/${task.id}`);
+
+                            tasksList.appendChild(clone);
+                        });
+                    } catch (e) {
+                        console.error("Failed to parse tasks or render:", e);
+                        tasksList.innerHTML = '<p class="text-red-400 text-center">Error loading tasks.</p>';
+                    }
+                } else if (requestPath && requestPath.includes('/createtask')) {
+                    // If a new task was created, manually trigger a full task list reload
+                    htmx.trigger(document.getElementById('tasks-list'), 'load');
+                }
+            });
+
+
+            // Event listener for checkbox changes (delegated)
+            document.body.addEventListener('change', function (evt) {
+                if (evt.target.matches('input[type="checkbox"]')) {
+                    const taskItem = evt.target.closest('.task-item');
+                    const descriptionSpan = taskItem.querySelector('span');
+                    if (evt.target.checked) {
+                        descriptionSpan.classList.add('completed');
+                    } else {
+                        descriptionSpan.classList.remove('completed');
+                    }
+                }
+            });
+
+            // Event listener for HTMX after PUT/DELETE to reload tasks
+            document.body.addEventListener('htmx:afterRequest', function (evt) {
+                if (evt.detail.xhr.status >= 200 && evt.detail.xhr.status < 300) {
+                    // If the request was for edittask or deletetask, reload the main list
+                    if (evt.detail.requestConfig.path.includes('/edittask') || evt.detail.requestConfig.path.includes('/deletetask')) {
+                        htmx.trigger(document.getElementById('tasks-list'), 'load'); // Re-trigger the loadtasks GET
+                    }
+                }
+            });
+        </script>
+    </body>
+
+</html>

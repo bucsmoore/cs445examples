@@ -1,0 +1,2 @@
+Flask
+requests # Although HTMX makes direct calls, 'requests' could be useful for server-side fetches if needed
